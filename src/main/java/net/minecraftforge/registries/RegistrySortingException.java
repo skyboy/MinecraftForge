@@ -40,11 +40,11 @@ public class RegistrySortingException extends ModSortingException implements IDi
 	@Override
 	protected void printStackTrace(WrappedPrintStream stream)
 	{
-		SortingExceptionData<RegistryLocation> exceptionData = getExceptionData();
+		SortingExceptionData<GameData.RegistryHolder> exceptionData = getExceptionData();
 		stream.println("A dependency cycle was detected in the registry set so an ordering cannot be determined");
 		stream.println("The first registry in the cycle is " + exceptionData.getFirstBadNode());
 		stream.println("The registry cycle involves:");
-		for (RegistryLocation mc : exceptionData.getVisitedNodes())
+		for (GameData.RegistryHolder mc : exceptionData.getVisitedNodes())
 		{
 			stream.println(String.format("\t%s : before: %s, after: %s", mc.toString(), Arrays.toString(mc.getDependants()), Arrays.toString(mc.getDependencies())));
 		}

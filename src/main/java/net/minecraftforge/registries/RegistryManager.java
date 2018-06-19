@@ -1,20 +1,23 @@
 package net.minecraftforge.registries;
 
-import java.util.Map;
-import java.util.Set;
-
-import javax.annotation.Nullable;
-
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Sets.SetView;
-
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.common.FMLLog;
 import net.minecraftforge.registries.ForgeRegistry.Snapshot;
-import net.minecraftforge.registries.IForgeRegistry.*;
+import net.minecraftforge.registries.IForgeRegistry.AddCallback;
+import net.minecraftforge.registries.IForgeRegistry.ClearCallback;
+import net.minecraftforge.registries.IForgeRegistry.CreateCallback;
+import net.minecraftforge.registries.IForgeRegistry.DummyFactory;
+import net.minecraftforge.registries.IForgeRegistry.MissingFactory;
+
+import java.util.Map;
+import java.util.Set;
+
+import javax.annotation.Nullable;
 
 public class RegistryManager
 {
@@ -22,9 +25,9 @@ public class RegistryManager
     public static final RegistryManager VANILLA = new RegistryManager("VANILLA");
     public static final RegistryManager FROZEN = new RegistryManager("FROZEN");
 
-    BiMap<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> registries = HashBiMap.create();
-    private BiMap<Class<? extends IForgeRegistryEntry<?>>, RegistryLocation> superTypes = HashBiMap.create();
-    private Set<RegistryLocation> persisted = Sets.newHashSet();
+    BiMap<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> registries = HashBiMap.create();
+    private BiMap<Class<? extends IForgeRegistryEntry<?>>, ResourceLocation> superTypes = HashBiMap.create();
+    private Set<ResourceLocation> persisted = Sets.newHashSet();
     private final String name;
 
     public RegistryManager(String name)
@@ -66,16 +69,16 @@ public class RegistryManager
             ForgeRegistry<V> ot = other.getRegistry(key);
             if (ot == null)
                 return null;
-            RegistryLocation ol = (RegistryLocation) other.getName(ot);
-            this.registries.put(ol, ot.copy(this));
-            this.superTypes.put(ot.getRegistrySuperType(), ol);
-            if (other.persisted.contains(ol))
-                this.persisted.add(ol);
+            this.registries.put(key, ot.copy(this));
+            this.superTypes.put(ot.getRegistrySuperType(), key);
+            if (other.persisted.contains(key))
+                this.persisted.add(key);
         }
         return getRegistry(key);
     }
 
-    <V extends IForgeRegistryEntry<V>> ForgeRegistry<V> createRegistry(RegistryLocation name, Class<V> type, ResourceLocation defaultKey, int min, int max,
+    <V extends IForgeRegistryEntry<V>> ForgeRegistry<V> createRegistry(ResourceLocation name, Class<V> type, ResourceLocation defaultKey, int min, int max,
+            String[] sortBefore, String[] sortAfter,
             @Nullable AddCallback<V> add, @Nullable ClearCallback<V> clear, @Nullable CreateCallback<V> create,
             boolean persisted, boolean allowOverrides, boolean isModifiable, @Nullable DummyFactory<V> dummyFactory, @Nullable MissingFactory<V> missing)
     {
@@ -88,7 +91,7 @@ public class RegistryManager
             FMLLog.log.error("Found existing registry of type {} named {}, you cannot create a new registry ({}) with type {}, as {} has a parent of that type", foundType, superTypes.get(foundType), name, type, type);
             throw new IllegalArgumentException("Duplicate registry parent type found - you can only have one registry for a particular super type");
         }
-        ForgeRegistry<V> reg = new ForgeRegistry<V>(type, defaultKey, min, max, create, add, clear, this, allowOverrides, isModifiable, dummyFactory, missing);
+        ForgeRegistry<V> reg = new ForgeRegistry<V>(type, defaultKey, min, max, sortBefore, sortAfter, create, add, clear, this, allowOverrides, isModifiable, dummyFactory, missing);
         registries.put(name, reg);
         superTypes.put(type, name);
         if (persisted)
@@ -113,7 +116,7 @@ public class RegistryManager
     public Map<ResourceLocation, Snapshot> takeSnapshot(boolean savingToDisc)
     {
         Map<ResourceLocation, Snapshot> ret = Maps.newHashMap();
-        Set<RegistryLocation> keys = savingToDisc ? this.persisted : this.registries.keySet();
+        Set<ResourceLocation> keys = savingToDisc ? this.persisted : this.registries.keySet();
         keys.forEach(name -> ret.put(name, getRegistry(name).makeSnapshot()));
         return ret;
     }

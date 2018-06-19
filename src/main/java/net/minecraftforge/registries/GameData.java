@@ -23,7 +23,6 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import net.minecraft.block.Block;
@@ -204,7 +203,7 @@ public class GameData
     public static void vanillaSnapshot()
     {
         FMLLog.log.debug("Creating vanilla freeze snapshot");
-        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> clazz = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), RegistryManager.ACTIVE, RegistryManager.VANILLA, clazz, true);
@@ -223,7 +222,7 @@ public class GameData
     public static void freezeData()
     {
         FMLLog.log.debug("Freezing registries");
-        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> clazz = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), RegistryManager.ACTIVE, RegistryManager.FROZEN, clazz, true);
@@ -252,7 +251,7 @@ public class GameData
         RegistryManager.ACTIVE.registries.forEach((name, reg) -> reg.resetDelegates());
 
         FMLLog.log.debug("Reverting to frozen data state.");
-        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> clazz = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), RegistryManager.FROZEN, RegistryManager.ACTIVE, clazz, true);
@@ -663,7 +662,7 @@ public class GameData
         STAGING.registries.forEach((name, reg) -> reg.validateContent(name));
 
         // Load the STAGING registry into the ACTIVE registry
-        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> registrySuperType = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), STAGING, RegistryManager.ACTIVE, registrySuperType, true);
@@ -719,7 +718,7 @@ public class GameData
     {
         MinecraftForge.EVENT_BUS.post(new RegistryEvent.NewRegistry());
         // sort them here so that cyclic dependencies crash now
-        sortRegistries(Lists.newArrayList(RegistryManager.ACTIVE.registries.keySet()));
+        sortRegistries(RegistryManager.ACTIVE.registries);
     }
 
     public static void fireRegistryEvents()
@@ -728,8 +727,7 @@ public class GameData
     }
     public static void fireRegistryEvents(Predicate<ResourceLocation> filter)
     {
-        List<RegistryLocation> keys = Lists.newArrayList(RegistryManager.ACTIVE.registries.keySet());
-        keys = sortRegistries(keys);
+        List<RegistryHolder> keys = sortRegistries(RegistryManager.ACTIVE.registries);
         /*
         RegistryManager.ACTIVE.registries.forEach((name, reg) -> {
             if (filter.test(name))
@@ -737,21 +735,10 @@ public class GameData
         });
         */
 
-        if (filter.test(BLOCKS))
+        for (RegistryHolder holder : keys)
         {
-            MinecraftForge.EVENT_BUS.post(RegistryManager.ACTIVE.getRegistry(BLOCKS).getRegisterEvent(BLOCKS));
-            ObjectHolderRegistry.INSTANCE.applyObjectHolders(); // inject any blocks
-        }
-        if (filter.test(ITEMS))
-        {
-            MinecraftForge.EVENT_BUS.post(RegistryManager.ACTIVE.getRegistry(ITEMS).getRegisterEvent(ITEMS));
-            ObjectHolderRegistry.INSTANCE.applyObjectHolders(); // inject any items
-        }
-        for (ResourceLocation rl : keys)
-        {
-            if (!filter.test(rl)) continue;
-            if (rl == BLOCKS || rl == ITEMS) continue;
-            MinecraftForge.EVENT_BUS.post(RegistryManager.ACTIVE.getRegistry(rl).getRegisterEvent(rl));
+            if (!filter.test(holder.key)) continue;
+            MinecraftForge.EVENT_BUS.post(holder.registry.getRegisterEvent(holder.key));
         }
         ObjectHolderRegistry.INSTANCE.applyObjectHolders(); // inject everything else
 
@@ -764,19 +751,20 @@ public class GameData
         */
     }
 
-    private static List<RegistryLocation> sortRegistries(List<RegistryLocation> keys)
+    private static List<RegistryHolder> sortRegistries(BiMap<ResourceLocation, ForgeRegistry<?>> values)
     {
-        TopologicalSort.DirectedGraph<RegistryLocation> graph = new TopologicalSort.DirectedGraph<>();
-        final RegistryLocation beforeAll = new RegistryLocation("before (all)");
-        final RegistryLocation before = new RegistryLocation("before");
-        final RegistryLocation after = new RegistryLocation("after");
-        final RegistryLocation afterAll = new RegistryLocation("after (all)");
-        Map<String, RegistryLocation> lookup = Maps.newHashMap();
-        for (RegistryLocation key : keys)
+        final TopologicalSort.DirectedGraph<RegistryHolder> graph = new TopologicalSort.DirectedGraph<>();
+        final RegistryHolder beforeAll = new RegistryHolder("before (all)");
+        final RegistryHolder before = new RegistryHolder("before");
+        final RegistryHolder after = new RegistryHolder("after");
+        final RegistryHolder afterAll = new RegistryHolder("after (all)");
+        final Map<String, RegistryHolder> lookup = Maps.newHashMap();
+        values.forEach((loc, value) ->
         {
+            RegistryHolder key = new RegistryHolder(loc, value);
             graph.addNode(key);
-            lookup.put(key.toString(), key);
-        }
+            lookup.put(loc.toString(), key);
+        });
         graph.addNode(beforeAll);
         graph.addNode(before);
         graph.addNode(after);
@@ -784,7 +772,7 @@ public class GameData
         graph.addEdge(beforeAll, before);
         graph.addEdge(before, after);
         graph.addEdge(after, afterAll);
-        for (RegistryLocation key : keys)
+        lookup.forEach((loc, key) ->
         {
             boolean preDep = false, postDep = false;
             for (String sort : key.getDependants())
@@ -819,16 +807,45 @@ public class GameData
             }
             if (!preDep) graph.addEdge(before, key);
             if (!postDep) graph.addEdge(key, after);
-        }
+        });
         try
         {
-            keys = TopologicalSort.topologicalSort(graph);
+            List<RegistryHolder> keys = TopologicalSort.topologicalSort(graph);
             keys.removeAll(Arrays.asList(beforeAll, before, after, afterAll));
             return keys;
         }
         catch (ModSortingException e)
         {
             throw new RegistrySortingException(e);
+        }
+    }
+
+    static class RegistryHolder extends ResourceLocation
+    {
+        final ResourceLocation key;
+        final ForgeRegistry<?> registry;
+        RegistryHolder(String sortingRule)
+        {
+            super(0, ":::" + sortingRule, "*");
+            key = this;
+            registry = null;
+        }
+
+        RegistryHolder(ResourceLocation name, ForgeRegistry<?> reg)
+        {
+            super(0, name.getResourceDomain(), name.getResourcePath());
+            key = name;
+            registry = reg;
+        }
+
+        String[] getDependants()
+        {
+            return registry == null ? new String[0] : registry.getDependants();
+        }
+
+        String[] getDependencies()
+        {
+            return registry == null ? new String[0] : registry.getDependencies();
         }
     }
 

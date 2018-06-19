@@ -19,12 +19,15 @@
 
 package net.minecraftforge.registries;
 
-import java.util.List;
-
 import com.google.common.collect.Lists;
-
 import net.minecraft.util.ResourceLocation;
-import net.minecraftforge.registries.IForgeRegistry.*;
+import net.minecraftforge.registries.IForgeRegistry.AddCallback;
+import net.minecraftforge.registries.IForgeRegistry.ClearCallback;
+import net.minecraftforge.registries.IForgeRegistry.CreateCallback;
+import net.minecraftforge.registries.IForgeRegistry.DummyFactory;
+import net.minecraftforge.registries.IForgeRegistry.MissingFactory;
+
+import java.util.List;
 
 import javax.annotation.Nullable;
 
@@ -154,13 +157,9 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
 
     public IForgeRegistry<T> create()
     {
-        return RegistryManager.ACTIVE.createRegistry(getRegistryName(), registryType, optionalDefaultKey, minId, maxId,
+        return RegistryManager.ACTIVE.createRegistry(registryName, registryType, optionalDefaultKey, minId, maxId,
+                sortBefore.toArray(new String[0]), sortAfter.toArray(new String[0]),
                 getAdd(), getClear(), getCreate(), saveToDisc, allowOverrides, allowModifications, dummyFactory, missingFactory);
-    }
-
-    private RegistryLocation getRegistryName()
-    {
-        return new RegistryLocation(registryName, sortBefore.toArray(new String[0]), sortAfter.toArray(new String[0]));
     }
 
     @Nullable
