@@ -132,16 +132,17 @@ public class GameData
         if (hasInit)
             return;
         hasInit = true;
-        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).addDependant(BLOCKS).create();
-        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addDependant(ITEMS).addCallback(BlockCallbacks.INSTANCE).create();
+        final ResourceLocation ALL = new ResourceLocation("*");
+        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).addDependant(ALL).create();
+        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addDependant(ALL).addDependency(SOUNDEVENTS).addCallback(BlockCallbacks.INSTANCE).create();
+        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependency(BLOCKS).addDependant(ALL).addCallback(ItemCallbacks.INSTANCE).create();
         makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).addDependency(BLOCKS).create();
         makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).addDependency(POTIONS).create();
-        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependency(BLOCKS).addDependency(ENCHANTMENTS).addCallback(ItemCallbacks.INSTANCE).create();
         makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).addDependency(ITEMS).create();
         entityRegistry = (ForgeRegistry<EntityEntry>)makeRegistry(ENTITIES, EntityEntry.class, MAX_ENTITY_ID).addCallback(EntityCallbacks.INSTANCE).addDependency(POTIONTYPES).create();
         makeRegistry(BIOMES,       Biome.class,       MAX_BIOME_ID).addDependency(ENTITIES).create();
         makeRegistry(PROFESSIONS,  VillagerProfession.class, MAX_PROFESSION_ID).addDependency(ITEMS).create();
-        makeRegistry(RECIPES,      IRecipe.class,     MAX_RECIPE_ID).disableSaving().allowModification().addCallback(RecipeCallbacks.INSTANCE).addDependency(new ResourceLocation("*")).create();
+        makeRegistry(RECIPES,      IRecipe.class,     MAX_RECIPE_ID).disableSaving().allowModification().addCallback(RecipeCallbacks.INSTANCE).addDependency(ALL).create();
     }
 
     private static <T extends IForgeRegistryEntry<T>> RegistryBuilder<T> makeRegistry(ResourceLocation name, Class<T> type, int min, int max)
