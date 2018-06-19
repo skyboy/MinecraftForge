@@ -26,6 +26,8 @@ import net.minecraftforge.fml.common.toposort.ModSortingException;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
+import java.util.Arrays;
+
 public class RegistrySortingException extends ModSortingException implements IDisplayableError
 {
 	private static final long serialVersionUID = 1L;
@@ -44,7 +46,7 @@ public class RegistrySortingException extends ModSortingException implements IDi
 		stream.println("The registry cycle involves:");
 		for (RegistryLocation mc : exceptionData.getVisitedNodes())
 		{
-			stream.println(String.format("\t%s : before: %s, after: %s", mc.toString(), mc.getDependants(), mc.getDependencies()));
+			stream.println(String.format("\t%s : before: %s, after: %s", mc.toString(), Arrays.toString(mc.getDependants()), Arrays.toString(mc.getDependencies())));
 		}
 	}
 
