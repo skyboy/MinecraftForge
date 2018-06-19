@@ -22,9 +22,9 @@ public class RegistryManager
     public static final RegistryManager VANILLA = new RegistryManager("VANILLA");
     public static final RegistryManager FROZEN = new RegistryManager("FROZEN");
 
-    BiMap<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> registries = HashBiMap.create();
-    private BiMap<Class<? extends IForgeRegistryEntry<?>>, ResourceLocation> superTypes = HashBiMap.create();
-    private Set<ResourceLocation> persisted = Sets.newHashSet();
+    BiMap<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> registries = HashBiMap.create();
+    private BiMap<Class<? extends IForgeRegistryEntry<?>>, RegistryLocation> superTypes = HashBiMap.create();
+    private Set<RegistryLocation> persisted = Sets.newHashSet();
     private final String name;
 
     public RegistryManager(String name)
@@ -66,15 +66,16 @@ public class RegistryManager
             ForgeRegistry<V> ot = other.getRegistry(key);
             if (ot == null)
                 return null;
-            this.registries.put(key, ot.copy(this));
-            this.superTypes.put(ot.getRegistrySuperType(), key);
-            if (other.persisted.contains(key))
-                this.persisted.add(key);
+            RegistryLocation ol = (RegistryLocation) other.getName(ot);
+            this.registries.put(ol, ot.copy(this));
+            this.superTypes.put(ot.getRegistrySuperType(), ol);
+            if (other.persisted.contains(ol))
+                this.persisted.add(ol);
         }
         return getRegistry(key);
     }
 
-    <V extends IForgeRegistryEntry<V>> ForgeRegistry<V> createRegistry(ResourceLocation name, Class<V> type, ResourceLocation defaultKey, int min, int max,
+    <V extends IForgeRegistryEntry<V>> ForgeRegistry<V> createRegistry(RegistryLocation name, Class<V> type, ResourceLocation defaultKey, int min, int max,
             @Nullable AddCallback<V> add, @Nullable ClearCallback<V> clear, @Nullable CreateCallback<V> create,
             boolean persisted, boolean allowOverrides, boolean isModifiable, @Nullable DummyFactory<V> dummyFactory, @Nullable MissingFactory<V> missing)
     {
@@ -112,7 +113,7 @@ public class RegistryManager
     public Map<ResourceLocation, Snapshot> takeSnapshot(boolean savingToDisc)
     {
         Map<ResourceLocation, Snapshot> ret = Maps.newHashMap();
-        Set<ResourceLocation> keys = savingToDisc ? this.persisted : this.registries.keySet();
+        Set<RegistryLocation> keys = savingToDisc ? this.persisted : this.registries.keySet();
         keys.forEach(name -> ret.put(name, getRegistry(name).makeSnapshot()));
         return ret;
     }

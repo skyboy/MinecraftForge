@@ -19,6 +19,8 @@
 
 package net.minecraftforge.registries;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -62,14 +64,13 @@ import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.EntityEntryBuilder;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraftforge.fml.common.registry.VillagerRegistry.VillagerProfession;
-
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.BiMap;
+import net.minecraftforge.fml.common.toposort.ModSortingException;
+import net.minecraftforge.fml.common.toposort.TopologicalSort;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -131,16 +132,16 @@ public class GameData
         if (hasInit)
             return;
         hasInit = true;
-        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addCallback(BlockCallbacks.INSTANCE).create();
-        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addCallback(ItemCallbacks.INSTANCE).create();
-        makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).create();
-        makeRegistry(BIOMES,       Biome.class,       MAX_BIOME_ID).create();
-        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).create();
-        makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).create();
-        makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).create();
-        makeRegistry(RECIPES,      IRecipe.class,     MAX_RECIPE_ID).disableSaving().allowModification().addCallback(RecipeCallbacks.INSTANCE).create();
-        makeRegistry(PROFESSIONS,  VillagerProfession.class, MAX_PROFESSION_ID).create();
-        entityRegistry = (ForgeRegistry<EntityEntry>)makeRegistry(ENTITIES, EntityEntry.class, MAX_ENTITY_ID).addCallback(EntityCallbacks.INSTANCE).create();
+        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).addDependant(BLOCKS).create();
+        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addDependant(ITEMS).addCallback(BlockCallbacks.INSTANCE).create();
+        makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).addDependency(BLOCKS).create();
+        makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).addDependency(POTIONS).create();
+        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependency(BLOCKS).addDependency(ENCHANTMENTS).addCallback(ItemCallbacks.INSTANCE).create();
+        makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).addDependency(ITEMS).create();
+        entityRegistry = (ForgeRegistry<EntityEntry>)makeRegistry(ENTITIES, EntityEntry.class, MAX_ENTITY_ID).addCallback(EntityCallbacks.INSTANCE).addDependency(POTIONTYPES).create();
+        makeRegistry(BIOMES,       Biome.class,       MAX_BIOME_ID).addDependency(ENTITIES).create();
+        makeRegistry(PROFESSIONS,  VillagerProfession.class, MAX_PROFESSION_ID).addDependency(ITEMS).create();
+        makeRegistry(RECIPES,      IRecipe.class,     MAX_RECIPE_ID).disableSaving().allowModification().addCallback(RecipeCallbacks.INSTANCE).addDependency(new ResourceLocation("*")).create();
     }
 
     private static <T extends IForgeRegistryEntry<T>> RegistryBuilder<T> makeRegistry(ResourceLocation name, Class<T> type, int min, int max)
@@ -202,7 +203,7 @@ public class GameData
     public static void vanillaSnapshot()
     {
         FMLLog.log.debug("Creating vanilla freeze snapshot");
-        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> clazz = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), RegistryManager.ACTIVE, RegistryManager.VANILLA, clazz, true);
@@ -221,7 +222,7 @@ public class GameData
     public static void freezeData()
     {
         FMLLog.log.debug("Freezing registries");
-        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> clazz = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), RegistryManager.ACTIVE, RegistryManager.FROZEN, clazz, true);
@@ -250,7 +251,7 @@ public class GameData
         RegistryManager.ACTIVE.registries.forEach((name, reg) -> reg.resetDelegates());
 
         FMLLog.log.debug("Reverting to frozen data state.");
-        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> clazz = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), RegistryManager.FROZEN, RegistryManager.ACTIVE, clazz, true);
@@ -661,7 +662,7 @@ public class GameData
         STAGING.registries.forEach((name, reg) -> reg.validateContent(name));
 
         // Load the STAGING registry into the ACTIVE registry
-        for (Map.Entry<ResourceLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
+        for (Map.Entry<RegistryLocation, ForgeRegistry<? extends IForgeRegistryEntry<?>>> r : RegistryManager.ACTIVE.registries.entrySet())
         {
             final Class<? extends IForgeRegistryEntry> registrySuperType = RegistryManager.ACTIVE.getSuperType(r.getKey());
             loadRegistry(r.getKey(), STAGING, RegistryManager.ACTIVE, registrySuperType, true);
@@ -716,6 +717,8 @@ public class GameData
     public static void fireCreateRegistryEvents()
     {
         MinecraftForge.EVENT_BUS.post(new RegistryEvent.NewRegistry());
+        // sort them here so that cyclic dependencies crash now
+        sortRegistries(Lists.newArrayList(RegistryManager.ACTIVE.registries.keySet()));
     }
 
     public static void fireRegistryEvents()
@@ -724,8 +727,8 @@ public class GameData
     }
     public static void fireRegistryEvents(Predicate<ResourceLocation> filter)
     {
-        List<ResourceLocation> keys = Lists.newArrayList(RegistryManager.ACTIVE.registries.keySet());
-        Collections.sort(keys, (o1, o2) -> o1.toString().compareToIgnoreCase(o2.toString()));
+        List<RegistryLocation> keys = Lists.newArrayList(RegistryManager.ACTIVE.registries.keySet());
+        keys = sortRegistries(keys);
         /*
         RegistryManager.ACTIVE.registries.forEach((name, reg) -> {
             if (filter.test(name))
@@ -758,6 +761,74 @@ public class GameData
                 ((ForgeRegistry<?>)reg).freeze();
         });
         */
+    }
+
+    private static List<RegistryLocation> sortRegistries(List<RegistryLocation> keys)
+    {
+        TopologicalSort.DirectedGraph<RegistryLocation> graph = new TopologicalSort.DirectedGraph<>();
+        final RegistryLocation beforeAll = new RegistryLocation("before (all)");
+        final RegistryLocation before = new RegistryLocation("before");
+        final RegistryLocation after = new RegistryLocation("after");
+        final RegistryLocation afterAll = new RegistryLocation("after (all)");
+        Map<String, RegistryLocation> lookup = Maps.newHashMap();
+        for (RegistryLocation key : keys)
+        {
+            graph.addNode(key);
+            lookup.put(key.toString(), key);
+        }
+        graph.addNode(beforeAll);
+        graph.addNode(before);
+        graph.addNode(after);
+        graph.addNode(afterAll);
+        graph.addEdge(beforeAll, before);
+        graph.addEdge(before, after);
+        graph.addEdge(after, afterAll);
+        for (RegistryLocation key : keys)
+        {
+            boolean preDep = false, postDep = false;
+            for (String sort : key.getDependants())
+            {
+                if (lookup.containsKey(sort))
+                {
+                    preDep = true;
+                    graph.addEdge(before, key);
+                    graph.addEdge(key, lookup.get(sort));
+                }
+                else if ("minecraft:*".equals(sort))
+                {
+                    preDep = postDep = true;
+                    graph.addEdge(beforeAll, key);
+                    graph.addEdge(key, before);
+                }
+            }
+            for (String sort : key.getDependencies())
+            {
+                if (lookup.containsKey(sort))
+                {
+                    postDep = true;
+                    graph.addEdge(lookup.get(sort), key);
+                    graph.addEdge(key, after);
+                }
+                else if ("minecraft:*".equals(sort))
+                {
+                    preDep = postDep = true;
+                    graph.addEdge(after, key);
+                    graph.addEdge(key, afterAll);
+                }
+            }
+            if (!preDep) graph.addEdge(before, key);
+            if (!postDep) graph.addEdge(key, after);
+        }
+        try
+        {
+            keys = TopologicalSort.topologicalSort(graph);
+            keys.removeAll(Arrays.asList(beforeAll, before, after, afterAll));
+            return keys;
+        }
+        catch (ModSortingException e)
+        {
+            throw new RegistrySortingException(e);
+        }
     }
 
     public static ResourceLocation checkPrefix(String name)

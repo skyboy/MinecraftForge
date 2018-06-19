@@ -43,6 +43,8 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
     private boolean allowModifications = false;
     private DummyFactory<T> dummyFactory;
     private MissingFactory<T> missingFactory;
+    private List<String> sortBefore = Lists.newLinkedList();
+    private List<String> sortAfter = Lists.newLinkedList();
 
     public RegistryBuilder<T> setName(ResourceLocation name)
     {
@@ -120,6 +122,18 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
         return this;
     }
 
+    public RegistryBuilder<T> addDependant(ResourceLocation registry)
+    {
+        sortBefore.add(registry.toString());
+        return this;
+    }
+
+    public RegistryBuilder<T> addDependency(ResourceLocation registry)
+    {
+        sortAfter.add(registry.toString());
+        return this;
+    }
+
     public RegistryBuilder<T> disableSaving()
     {
         this.saveToDisc = false;
@@ -140,8 +154,13 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
 
     public IForgeRegistry<T> create()
     {
-        return RegistryManager.ACTIVE.createRegistry(registryName, registryType, optionalDefaultKey, minId, maxId,
+        return RegistryManager.ACTIVE.createRegistry(getRegistryName(), registryType, optionalDefaultKey, minId, maxId,
                 getAdd(), getClear(), getCreate(), saveToDisc, allowOverrides, allowModifications, dummyFactory, missingFactory);
+    }
+
+    private RegistryLocation getRegistryName()
+    {
+        return new RegistryLocation(registryName, sortBefore.toArray(new String[0]), sortAfter.toArray(new String[0]));
     }
 
     @Nullable
