@@ -95,7 +95,7 @@ public interface IForgeRegistry<V extends IForgeRegistryEntry<V>> extends Iterab
     }
 
     /**
-     * Callback fired when a registry instance is created. Populate slave maps here.
+     * Callback fired after the Register event has fired. This is done so some registries can update ObjectHolders.
      */
     interface PostRegisterCallback<V extends IForgeRegistryEntry<V>>
     {
