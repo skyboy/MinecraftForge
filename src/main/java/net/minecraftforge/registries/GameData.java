@@ -730,6 +730,8 @@ public class GameData
     public static void fireRegistryEvents(Predicate<ResourceLocation> filter)
     {
         List<RegistryHolder> keys = getSortedRegistries(RegistryManager.ACTIVE.registries);
+        keys.removeIf(filter.negate());
+
         /*
         RegistryManager.ACTIVE.registries.forEach((name, reg) -> {
             if (filter.test(name))
@@ -739,7 +741,6 @@ public class GameData
 
         for (RegistryHolder holder : keys)
         {
-            if (!filter.test(holder.key)) continue;
             MinecraftForge.EVENT_BUS.post(holder.registry.getRegisterEvent(holder.key));
             holder.registry.registrationComplete();
         }
