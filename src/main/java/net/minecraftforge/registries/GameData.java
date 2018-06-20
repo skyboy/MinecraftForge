@@ -136,7 +136,7 @@ public class GameData
         final ResourceLocation ALL = new ResourceLocation("*");
         makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).addDependant(ALL).add(updateHolders).create();
         makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addDependant(ALL).addDependency(SOUNDEVENTS).addCallback(BlockCallbacks.INSTANCE).add(updateHolders).create();
-        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependency(BLOCKS).addDependant(ALL).addCallback(ItemCallbacks.INSTANCE).add(updateHolders).create();
+        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependant(ALL).addDependency(BLOCKS).addCallback(ItemCallbacks.INSTANCE).add(updateHolders).create();
         makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).addDependency(BLOCKS).create();
         makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).addDependency(POTIONS).create();
         makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).addDependency(ITEMS).create();
