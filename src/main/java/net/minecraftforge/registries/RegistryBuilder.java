@@ -131,12 +131,25 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
         return this;
     }
 
+    /**
+     * Adding {@code "*"} as a dependant will sort your registry before all other registries,
+     * if you want to load before a registry that is sorted before {@code "*"} you will also need to.
+     * <p>
+     * Adding {@code "forge-sort:blocks"} as a dependant will sort you into the same phase as SoundEvents, Blocks, and Items.
+     * If you want to sort before one of those, you will also need to sort before this, if you are not sorting before {@code "*"}.
+     */
     public RegistryBuilder<T> addDependant(ResourceLocation registry)
     {
         sortBefore.add(registry.toString());
         return this;
     }
 
+    /**
+     * Adding {@code "*"} as a dependency will sort your registry after all other registries,
+     * if you want to load after a registry that is sorted after {@code "*"} you will also need to.
+     * <p>
+     * Adding {@code "forge-sort:blocks"} as a dependency will not do anything useful, all registries that do not otherwise specify are sorted after it.
+     */
     public RegistryBuilder<T> addDependency(ResourceLocation registry)
     {
         sortAfter.add(registry.toString());

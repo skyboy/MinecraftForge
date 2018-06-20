@@ -133,10 +133,12 @@ public class GameData
             return;
         hasInit = true;
         final IForgeRegistry.PostRegisterCallback updateHolders = (reg, stage) -> ObjectHolderRegistry.INSTANCE.applyObjectHolders();
+        final ResourceLocation SORT_BLOCKS = new ResourceLocation("forge-sort:blocks");
+        // "*:*" would be preferable for ALL, but a bug in ResouceLocation means the two constructors behave differently on a domain with length 1.
         final ResourceLocation ALL = new ResourceLocation("*");
-        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).addDependant(ALL).add(updateHolders).create();
-        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addDependant(ALL).addDependency(SOUNDEVENTS).addCallback(BlockCallbacks.INSTANCE).add(updateHolders).create();
-        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependant(ALL).addDependency(BLOCKS).addCallback(ItemCallbacks.INSTANCE).add(updateHolders).create();
+        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).addDependant(SORT_BLOCKS).add(updateHolders).create();
+        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addDependant(SORT_BLOCKS).addDependency(SOUNDEVENTS).addCallback(BlockCallbacks.INSTANCE).add(updateHolders).create();
+        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependant(SORT_BLOCKS).addDependency(BLOCKS).addCallback(ItemCallbacks.INSTANCE).add(updateHolders).create();
         makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).addDependency(BLOCKS).create();
         makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).addDependency(POTIONS).create();
         makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).addDependency(ITEMS).addDependency(POTIONS).create();
@@ -758,54 +760,78 @@ public class GameData
     private static List<RegistryHolder> getSortedRegistries(BiMap<ResourceLocation, ForgeRegistry<?>> values)
     {
         final TopologicalSort.DirectedGraph<RegistryHolder> graph = new TopologicalSort.DirectedGraph<>();
+        final Map<String, RegistryHolder> lookup = Maps.newHashMap();
+        // bimap enables an arbitrary number of discrete sorting blocks
+        final BiMap<RegistryHolder, RegistryHolder> blocks = HashBiMap.create(), rBlocks = blocks.inverse();
+
+        // special targets, only 4
         final RegistryHolder beforeAll = new RegistryHolder("before (all)");
         final RegistryHolder before = new RegistryHolder("before");
         final RegistryHolder after = new RegistryHolder("after");
         final RegistryHolder afterAll = new RegistryHolder("after (all)");
-        final Map<String, RegistryHolder> lookup = Maps.newHashMap();
-        values.forEach((loc, value) ->
+
+        // selectable targets
+        final RegistryHolder blockSort = new RegistryHolder(new ResourceLocation("forge-sort:blocks"), null);
+
+        // valid sort targets go in the lookup map
+        lookup.put(blockSort.toString(), blockSort);
+
+        values.forEach((loc, reg) ->
         {
-            RegistryHolder key = new RegistryHolder(loc, value);
+            RegistryHolder key = new RegistryHolder(loc, reg);
             graph.addNode(key);
             lookup.put(loc.toString(), key);
         });
+
+        // after registries: if a "forge-sort" registry is added, this won't erase it; stupid as it is
         graph.addNode(beforeAll);
+        graph.addNode(blockSort);
         graph.addNode(before);
         graph.addNode(after);
         graph.addNode(afterAll);
-        graph.addEdge(beforeAll, before);
-        graph.addEdge(before, after);
-        graph.addEdge(after, afterAll);
+
+        // define the sorting blocks
+        blocks.put(beforeAll, blockSort);
+        blocks.put(blockSort, before);
+        blocks.put(before, after);
+        blocks.put(after, afterAll);
+        // then pour it into the graph
+        blocks.forEach(graph::addEdge);
+
         lookup.forEach((loc, key) ->
         {
+            if (key.registry == null) return; // ignore sort targets
+
             boolean preDep = false, postDep = false;
             for (String sort : key.getDependants())
             {
-                if (lookup.containsKey(sort))
+                RegistryHolder dep = lookup.get(sort);
+                if (dep != null) // contains ...
                 {
                     preDep = true;
-                    graph.addEdge(before, key);
-                    graph.addEdge(key, lookup.get(sort));
+                    graph.addEdge(rBlocks.getOrDefault(dep, before), key);
+                    graph.addEdge(key, dep);
                 }
                 else if ("minecraft:*".equals(sort))
                 {
                     preDep = postDep = true;
                     graph.addEdge(beforeAll, key);
-                    graph.addEdge(key, before);
+                    graph.addEdge(key, blocks.get(beforeAll));
                 }
             }
             for (String sort : key.getDependencies())
             {
-                if (lookup.containsKey(sort))
+                RegistryHolder dep = lookup.get(sort);
+                if (dep != null) // contains ...
                 {
                     postDep = true;
-                    graph.addEdge(lookup.get(sort), key);
-                    graph.addEdge(key, after);
+                    graph.addEdge(dep, key);
+                    graph.addEdge(key, blocks.getOrDefault(dep, after));
                 }
                 else if ("minecraft:*".equals(sort))
                 {
                     preDep = postDep = true;
-                    graph.addEdge(after, key);
+                    graph.addEdge(rBlocks.get(afterAll), key);
                     graph.addEdge(key, afterAll);
                 }
             }
@@ -815,7 +841,7 @@ public class GameData
         try
         {
             List<RegistryHolder> keys = TopologicalSort.topologicalSort(graph);
-            keys.removeAll(Arrays.asList(beforeAll, before, after, afterAll));
+            keys.removeIf(rh -> rh.registry == null);
             return keys;
         }
         catch (ModSortingException e)
@@ -826,8 +852,12 @@ public class GameData
 
     static class RegistryHolder extends ResourceLocation
     {
+        // holding an actual ResourceLocation to avoid potential problems with caching a RegistryHolder in events
         final ResourceLocation key;
         final ForgeRegistry<?> registry;
+
+        // extending ResourceLocation isn't pretty, but this gives us the protected constructor to bypass potential future validation in the public constructors
+        // and to easily apply predicates without an unwrapping lambda
         RegistryHolder(String sortingRule)
         {
             super(0, ":::" + sortingRule, "*");
