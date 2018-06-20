@@ -139,7 +139,7 @@ public class GameData
         makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependant(ALL).addDependency(BLOCKS).addCallback(ItemCallbacks.INSTANCE).add(updateHolders).create();
         makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).addDependency(BLOCKS).create();
         makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).addDependency(POTIONS).create();
-        makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).addDependency(ITEMS).create();
+        makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).addDependency(ITEMS).addDependency(POTIONS).create();
         entityRegistry = (ForgeRegistry<EntityEntry>)makeRegistry(ENTITIES, EntityEntry.class, MAX_ENTITY_ID).addCallback(EntityCallbacks.INSTANCE).addDependency(POTIONTYPES).create();
         makeRegistry(BIOMES,       Biome.class,       MAX_BIOME_ID).addDependency(ENTITIES).create();
         makeRegistry(PROFESSIONS,  VillagerProfession.class, MAX_PROFESSION_ID).addDependency(ITEMS).create();
