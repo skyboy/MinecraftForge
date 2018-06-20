@@ -1,5 +1,10 @@
 package net.minecraftforge.registries;
 
+import java.util.Map;
+import java.util.Set;
+
+import javax.annotation.Nullable;
+
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Maps;
@@ -8,16 +13,7 @@ import com.google.common.collect.Sets.SetView;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.common.FMLLog;
 import net.minecraftforge.registries.ForgeRegistry.Snapshot;
-import net.minecraftforge.registries.IForgeRegistry.AddCallback;
-import net.minecraftforge.registries.IForgeRegistry.ClearCallback;
-import net.minecraftforge.registries.IForgeRegistry.CreateCallback;
-import net.minecraftforge.registries.IForgeRegistry.DummyFactory;
-import net.minecraftforge.registries.IForgeRegistry.MissingFactory;
-
-import java.util.Map;
-import java.util.Set;
-
-import javax.annotation.Nullable;
+import net.minecraftforge.registries.IForgeRegistry.*;
 
 public class RegistryManager
 {
