@@ -720,7 +720,7 @@ public class GameData
     {
         MinecraftForge.EVENT_BUS.post(new RegistryEvent.NewRegistry());
         // sort them here so that cyclic dependencies crash now
-        sortRegistries(RegistryManager.ACTIVE.registries);
+        getSortedRegistries(RegistryManager.ACTIVE.registries);
     }
 
     public static void fireRegistryEvents()
@@ -729,7 +729,7 @@ public class GameData
     }
     public static void fireRegistryEvents(Predicate<ResourceLocation> filter)
     {
-        List<RegistryHolder> keys = sortRegistries(RegistryManager.ACTIVE.registries);
+        List<RegistryHolder> keys = getSortedRegistries(RegistryManager.ACTIVE.registries);
         /*
         RegistryManager.ACTIVE.registries.forEach((name, reg) -> {
             if (filter.test(name))
@@ -754,7 +754,7 @@ public class GameData
         */
     }
 
-    private static List<RegistryHolder> sortRegistries(BiMap<ResourceLocation, ForgeRegistry<?>> values)
+    private static List<RegistryHolder> getSortedRegistries(BiMap<ResourceLocation, ForgeRegistry<?>> values)
     {
         final TopologicalSort.DirectedGraph<RegistryHolder> graph = new TopologicalSort.DirectedGraph<>();
         final RegistryHolder beforeAll = new RegistryHolder("before (all)");
