@@ -95,6 +95,14 @@ public interface IForgeRegistry<V extends IForgeRegistryEntry<V>> extends Iterab
     }
 
     /**
+     * Callback fired when a registry instance is created. Populate slave maps here.
+     */
+    interface PostRegisterCallback<V extends IForgeRegistryEntry<V>>
+    {
+        void afterRegistration(IForgeRegistryInternal<V> owner, RegistryManager stage);
+    }
+
+    /**
      * Factory for creating dummy entries, allowing worlds to be loaded and keep the missing block references.
      */
     interface DummyFactory<V extends IForgeRegistryEntry<V>>

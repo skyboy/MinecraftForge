@@ -24,6 +24,7 @@ import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.registries.IForgeRegistry.AddCallback;
 import net.minecraftforge.registries.IForgeRegistry.ClearCallback;
 import net.minecraftforge.registries.IForgeRegistry.CreateCallback;
+import net.minecraftforge.registries.IForgeRegistry.PostRegisterCallback;
 import net.minecraftforge.registries.IForgeRegistry.DummyFactory;
 import net.minecraftforge.registries.IForgeRegistry.MissingFactory;
 
@@ -41,6 +42,7 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
     private List<AddCallback<T>> addCallback = Lists.newArrayList();
     private List<ClearCallback<T>> clearCallback = Lists.newArrayList();
     private List<CreateCallback<T>> createCallback = Lists.newArrayList();
+    private List<PostRegisterCallback<T>> registerCallback = Lists.newArrayList();
     private boolean saveToDisc = true;
     private boolean allowOverrides = true;
     private boolean allowModifications = false;
@@ -88,6 +90,8 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
             this.add((ClearCallback<T>)inst);
         if (inst instanceof CreateCallback)
             this.add((CreateCallback<T>)inst);
+        if (inst instanceof PostRegisterCallback)
+            this.add((PostRegisterCallback<T>)inst);
         if (inst instanceof DummyFactory)
             this.set((DummyFactory<T>)inst);
         if (inst instanceof MissingFactory)
@@ -110,6 +114,12 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
     public RegistryBuilder<T> add(CreateCallback<T> create)
     {
         this.createCallback.add(create);
+        return this;
+    }
+
+    public RegistryBuilder<T> add(PostRegisterCallback<T> register)
+    {
+        this.registerCallback.add(register);
         return this;
     }
 
@@ -159,7 +169,8 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
     {
         return RegistryManager.ACTIVE.createRegistry(registryName, registryType, optionalDefaultKey, minId, maxId,
                 sortBefore.toArray(new String[0]), sortAfter.toArray(new String[0]),
-                getAdd(), getClear(), getCreate(), saveToDisc, allowOverrides, allowModifications, dummyFactory, missingFactory);
+                getAdd(), getClear(), getCreate(), getAfterRegister(),
+                saveToDisc, allowOverrides, allowModifications, dummyFactory, missingFactory);
     }
 
     @Nullable
@@ -204,6 +215,21 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
         {
             for (CreateCallback<T> cb : this.createCallback)
                 cb.onCreate(owner, stage);
+        };
+    }
+
+    @Nullable
+    private PostRegisterCallback<T> getAfterRegister()
+    {
+        if (registerCallback.isEmpty())
+            return null;
+        if (registerCallback.size() == 1)
+            return registerCallback.get(0);
+
+        return (owner, stage) ->
+        {
+            for (PostRegisterCallback<T> cb : this.registerCallback)
+                cb.afterRegistration(owner, stage);
         };
     }
 }

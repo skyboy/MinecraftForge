@@ -67,6 +67,7 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
     private final CreateCallback<V> create;
     private final AddCallback<V> add;
     private final ClearCallback<V> clear;
+    private final PostRegisterCallback<V> postRegister;
     private final MissingFactory<V> missing;
     private final BitSet availabilityMap;
     private final Set<ResourceLocation> dummies = Sets.newHashSet();
@@ -84,7 +85,9 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
     private V defaultValue = null;
     boolean isFrozen = false;
 
-    ForgeRegistry(Class<V> superType, ResourceLocation defaultKey, int min, int max, String[] before, String[] after, @Nullable CreateCallback<V> create, @Nullable AddCallback<V> add, @Nullable ClearCallback<V> clear, RegistryManager stage, boolean allowOverrides, boolean isModifiable, @Nullable DummyFactory<V> dummyFactory, @Nullable MissingFactory<V> missing)
+    ForgeRegistry(Class<V> superType, ResourceLocation defaultKey, int min, int max, String[] before, String[] after,
+                  @Nullable CreateCallback<V> create, @Nullable AddCallback<V> add, @Nullable ClearCallback<V> clear, @Nullable PostRegisterCallback<V> postRegister,
+                  RegistryManager stage, boolean allowOverrides, boolean isModifiable, @Nullable DummyFactory<V> dummyFactory, @Nullable MissingFactory<V> missing)
     {
         this.stage = stage;
         this.superType = superType;
@@ -95,6 +98,7 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
         this.create = create;
         this.add = add;
         this.clear = clear;
+        this.postRegister = postRegister;
         this.missing = missing;
         this.isDelegated = IForgeRegistryEntry.Impl.class.isAssignableFrom(superType); //TODO: Make this IDelegatedRegistryEntry?
         this.allowOverrides = allowOverrides;
@@ -279,7 +283,7 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
 
     ForgeRegistry<V> copy(RegistryManager stage)
     {
-        return new ForgeRegistry<V>(superType, defaultKey, min, max, sortBefore, sortAfter, create, add, clear, stage, allowOverrides, isModifiable, dummyFactory, missing);
+        return new ForgeRegistry<V>(superType, defaultKey, min, max, sortBefore, sortAfter, create, add, clear, postRegister, stage, allowOverrides, isModifiable, dummyFactory, missing);
     }
 
     int add(int id, V value)
@@ -626,6 +630,12 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
     RegistryEvent.Register<V> getRegisterEvent(ResourceLocation name)
     {
         return new RegistryEvent.Register<V>(name, this);
+    }
+
+    void registrationComplete()
+    {
+        if (postRegister != null)
+            postRegister.afterRegistration(this, stage);
     }
 
     void dump(ResourceLocation name)
