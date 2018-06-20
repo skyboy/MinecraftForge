@@ -22,19 +22,30 @@ package net.minecraftforge.registries;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraftforge.fml.client.GuiSortingProblem;
 import net.minecraftforge.fml.client.IDisplayableError;
+import net.minecraftforge.fml.common.EnhancedRuntimeException;
 import net.minecraftforge.fml.common.toposort.ModSortingException;
+import net.minecraftforge.fml.common.toposort.ModSortingException.SortingExceptionData;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.Arrays;
 
-public class RegistrySortingException extends ModSortingException implements IDisplayableError
+public class RegistrySortingException extends EnhancedRuntimeException
 {
 	private static final long serialVersionUID = 1L;
 
+	private SortingExceptionData<?> sortingExceptionData;
+
 	public <T> RegistrySortingException(ModSortingException e)
 	{
-		super(e.getMessage(), e.getExceptionData().getFirstBadNode(), e.getExceptionData().getVisitedNodes());
+		super(e.getMessage());
+		sortingExceptionData = e.getExceptionData();
+	}
+
+	@SuppressWarnings("unchecked")
+	public <T> SortingExceptionData<T> getExceptionData()
+	{
+		return (SortingExceptionData<T>) sortingExceptionData;
 	}
 
 	@Override
@@ -48,13 +59,5 @@ public class RegistrySortingException extends ModSortingException implements IDi
 		{
 			stream.println(String.format("\t%s : before: %s, after: %s", mc.toString(), Arrays.toString(mc.getDependants()), Arrays.toString(mc.getDependencies())));
 		}
-	}
-
-
-	@Override
-	@SideOnly(Side.CLIENT)
-	public GuiScreen createGui()
-	{
-		return new GuiSortingProblem(this);
 	}
 }
