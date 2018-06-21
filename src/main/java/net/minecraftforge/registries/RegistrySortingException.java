@@ -17,75 +17,42 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-package net.minecraftforge.fml.common.toposort;
+package net.minecraftforge.registries;
 
-import java.util.Set;
-
-import net.minecraft.client.gui.GuiScreen;
-import net.minecraftforge.fml.client.GuiSortingProblem;
-import net.minecraftforge.fml.client.IDisplayableError;
 import net.minecraftforge.fml.common.EnhancedRuntimeException;
-import net.minecraftforge.fml.common.ModContainer;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
+import net.minecraftforge.fml.common.toposort.ModSortingException;
+import net.minecraftforge.fml.common.toposort.ModSortingException.SortingExceptionData;
 
-public class ModSortingException extends EnhancedRuntimeException implements IDisplayableError
+import java.util.Arrays;
+
+public class RegistrySortingException extends EnhancedRuntimeException
 {
-    private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 1L;
 
-    public class SortingExceptionData<T>
-    {
-        public SortingExceptionData(T node, Set<T> visitedNodes)
-        {
-            this.firstBadNode = node;
-            this.visitedNodes = visitedNodes;
-        }
+	private SortingExceptionData<?> sortingExceptionData;
 
-        private T firstBadNode;
-        private Set<T> visitedNodes;
+	public <T> RegistrySortingException(ModSortingException e)
+	{
+		super(e.getMessage());
+		sortingExceptionData =e.getExceptionData();
+	}
 
-        public T getFirstBadNode()
-        {
-            return firstBadNode;
-        }
-        public Set<T> getVisitedNodes()
-        {
-            return visitedNodes;
-        }
-    }
+	@SuppressWarnings("unchecked")
+	public <T> SortingExceptionData<T> getExceptionData()
+	{
+		return (SortingExceptionData<T>) sortingExceptionData;
+	}
 
-    private SortingExceptionData<?> sortingExceptionData;
-
-    public <T> ModSortingException(String string, T node, Set<T> visitedNodes)
-    {
-        super(string);
-        this.sortingExceptionData = new SortingExceptionData<T>(node, visitedNodes);
-    }
-
-    @SuppressWarnings("unchecked")
-    public <T> SortingExceptionData<T> getExceptionData()
-    {
-        return (SortingExceptionData<T>) sortingExceptionData;
-    }
-
-    @Override
-    protected void printStackTrace(WrappedPrintStream stream)
-    {
-        SortingExceptionData<ModContainer> exceptionData = getExceptionData();
-        stream.println("A dependency cycle was detected in the input mod set so an ordering cannot be determined");
-        stream.println("The first mod in the cycle is " + exceptionData.getFirstBadNode());
-        stream.println("The mod cycle involves:");
-        for (ModContainer mc : exceptionData.getVisitedNodes())
-        {
-            stream.println(String.format("\t%s : before: %s, after: %s", mc.toString(), mc.getDependants(), mc.getDependencies()));
-        }
-    }
-
-
-    @Override
-    @SideOnly(Side.CLIENT)
-    public GuiScreen createGui()
-    {
-        return new GuiSortingProblem(this);
-    }
+	@Override
+	protected void printStackTrace(WrappedPrintStream stream)
+	{
+		SortingExceptionData<GameData.RegistryHolder> exceptionData = getExceptionData();
+		stream.println("A dependency cycle was detected in the registry set so an ordering cannot be determined");
+		stream.println("The first registry in the cycle is " + exceptionData.getFirstBadNode());
+		stream.println("The registry cycle involves:");
+		for (GameData.RegistryHolder mc : exceptionData.getVisitedNodes())
+		{
+			stream.println(String.format("\t%s : before: %s, after: %s", mc.toString(), Arrays.toString(mc.getDependants()), Arrays.toString(mc.getDependencies())));
+		}
+	}
 }
