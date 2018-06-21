@@ -33,7 +33,7 @@ public class ModSortingException extends EnhancedRuntimeException implements IDi
 {
     private static final long serialVersionUID = 1L;
 
-    public class SortingExceptionData<T>
+    public static class SortingExceptionData<T>
     {
         public SortingExceptionData(T node, Set<T> visitedNodes)
         {
