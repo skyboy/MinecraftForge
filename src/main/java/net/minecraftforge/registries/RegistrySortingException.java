@@ -34,7 +34,7 @@ public class RegistrySortingException extends EnhancedRuntimeException
 	public <T> RegistrySortingException(ModSortingException e)
 	{
 		super(e.getMessage());
-		sortingExceptionData = e.getExceptionData();
+		sortingExceptionData =e.getExceptionData();
 	}
 
 	@SuppressWarnings("unchecked")
