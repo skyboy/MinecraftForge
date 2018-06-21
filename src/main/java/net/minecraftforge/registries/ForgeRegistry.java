@@ -25,20 +25,18 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import org.apache.commons.lang3.Validate;
 
-import java.util.Set;
-
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -70,6 +68,7 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
     private final CreateCallback<V> create;
     private final AddCallback<V> add;
     private final ClearCallback<V> clear;
+    private final PostRegisterCallback<V> postRegister;
     private final MissingFactory<V> missing;
     private final BitSet availabilityMap;
     private final Set<ResourceLocation> dummies = Sets.newHashSet();
@@ -82,11 +81,14 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
     private final int max;
     private final boolean allowOverrides;
     private final boolean isModifiable;
+    private final String[] sortBefore, sortAfter;
 
     private V defaultValue = null;
     boolean isFrozen = false;
 
-    ForgeRegistry(Class<V> superType, ResourceLocation defaultKey, int min, int max, @Nullable CreateCallback<V> create, @Nullable AddCallback<V> add, @Nullable ClearCallback<V> clear, RegistryManager stage, boolean allowOverrides, boolean isModifiable, @Nullable DummyFactory<V> dummyFactory, @Nullable MissingFactory<V> missing)
+    ForgeRegistry(Class<V> superType, ResourceLocation defaultKey, int min, int max, String[] before, String[] after,
+                  @Nullable CreateCallback<V> create, @Nullable AddCallback<V> add, @Nullable ClearCallback<V> clear, @Nullable PostRegisterCallback<V> postRegister,
+                  RegistryManager stage, boolean allowOverrides, boolean isModifiable, @Nullable DummyFactory<V> dummyFactory, @Nullable MissingFactory<V> missing)
     {
         this.stage = stage;
         this.superType = superType;
@@ -97,13 +99,26 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
         this.create = create;
         this.add = add;
         this.clear = clear;
+        this.postRegister = postRegister;
         this.missing = missing;
         this.isDelegated = IForgeRegistryEntry.Impl.class.isAssignableFrom(superType); //TODO: Make this IDelegatedRegistryEntry?
         this.allowOverrides = allowOverrides;
         this.isModifiable = isModifiable;
         this.dummyFactory = dummyFactory;
+        this.sortBefore = before;
+        this.sortAfter = after;
         if (this.create != null)
             this.create.onCreate(this, stage);
+    }
+
+    String[] getDependants()
+    {
+        return sortBefore;
+    }
+
+    String[] getDependencies()
+    {
+        return sortAfter;
     }
 
     @Override
@@ -269,7 +284,7 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
 
     ForgeRegistry<V> copy(RegistryManager stage)
     {
-        return new ForgeRegistry<V>(superType, defaultKey, min, max, create, add, clear, stage, allowOverrides, isModifiable, dummyFactory, missing);
+        return new ForgeRegistry<V>(superType, defaultKey, min, max, sortBefore, sortAfter, create, add, clear, postRegister, stage, allowOverrides, isModifiable, dummyFactory, missing);
     }
 
     int add(int id, V value)
@@ -616,6 +631,12 @@ public class ForgeRegistry<V extends IForgeRegistryEntry<V>> implements IForgeRe
     RegistryEvent.Register<V> getRegisterEvent(ResourceLocation name)
     {
         return new RegistryEvent.Register<V>(name, this);
+    }
+
+    void registrationComplete()
+    {
+        if (postRegister != null)
+            postRegister.afterRegistration(this, stage);
     }
 
     void dump(ResourceLocation name)

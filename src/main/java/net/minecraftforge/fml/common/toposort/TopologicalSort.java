@@ -135,6 +135,21 @@ public class TopologicalSort
      */
     public static <T> List<T> topologicalSort(DirectedGraph<T> graph)
     {
+        return topologicalSort(graph, (node, sortedResult, visitedNodes, expandedNodes) ->
+        {
+            FMLLog.log.fatal("Mod Sorting failed.");
+            FMLLog.log.fatal("Visiting node {}", node);
+            FMLLog.log.fatal("Current sorted list : {}", sortedResult);
+            FMLLog.log.fatal("Visited set for this node : {}", visitedNodes);
+            FMLLog.log.fatal("Explored node set : {}", expandedNodes);
+            SetView<T> cycleList = Sets.difference(visitedNodes, expandedNodes);
+            FMLLog.log.fatal("Likely cycle is in : {}", cycleList);
+            throw new ModSortingException("There was a cycle detected in the input graph, sorting is not possible", node, cycleList);
+        });
+    }
+
+    public static <T> List<T> topologicalSort(DirectedGraph<T> graph, IGraphSortCallback<T> callback)
+    {
         DirectedGraph<T> rGraph = reverse(graph);
         List<T> sortedResult = new ArrayList<T>();
         Set<T> visitedNodes = new HashSet<T>();
@@ -143,7 +158,7 @@ public class TopologicalSort
 
         for (T node : rGraph)
         {
-            explore(node, rGraph, sortedResult, visitedNodes, expandedNodes);
+            explore(node, rGraph, sortedResult, visitedNodes, expandedNodes, callback);
         }
 
         return sortedResult;
@@ -169,7 +184,7 @@ public class TopologicalSort
         return result;
     }
 
-    public static <T> void explore(T node, DirectedGraph<T> graph, List<T> sortedResult, Set<T> visitedNodes, Set<T> expandedNodes)
+    public static <T> void explore(T node, DirectedGraph<T> graph, List<T> sortedResult, Set<T> visitedNodes, Set<T> expandedNodes, IGraphSortCallback<T> callback)
     {
         // Have we been here before?
         if (visitedNodes.contains(node))
@@ -181,14 +196,8 @@ public class TopologicalSort
                 return;
             }
 
-            FMLLog.log.fatal("Mod Sorting failed.");
-            FMLLog.log.fatal("Visiting node {}", node);
-            FMLLog.log.fatal("Current sorted list : {}", sortedResult);
-            FMLLog.log.fatal("Visited set for this node : {}", visitedNodes);
-            FMLLog.log.fatal("Explored node set : {}", expandedNodes);
-            SetView<T> cycleList = Sets.difference(visitedNodes, expandedNodes);
-            FMLLog.log.fatal("Likely cycle is in : {}", cycleList);
-            throw new ModSortingException("There was a cycle detected in the input graph, sorting is not possible", node, cycleList);
+            callback.onCycleDetected(node,sortedResult,visitedNodes,expandedNodes);
+
         }
 
         // Visit this node
@@ -197,12 +206,17 @@ public class TopologicalSort
         // Recursively explore inbound edges
         for (T inbound : graph.edgesFrom(node))
         {
-            explore(inbound, graph, sortedResult, visitedNodes, expandedNodes);
+            explore(inbound, graph, sortedResult, visitedNodes, expandedNodes, callback);
         }
 
         // Add ourselves now
         sortedResult.add(node);
         // And mark ourselves as explored
         expandedNodes.add(node);
+    }
+
+    public interface IGraphSortCallback<T>
+    {
+        void onCycleDetected(T node, List<T> sortedResult, Set<T> visitedNodes, Set<T> expandedNodes);
     }
 }

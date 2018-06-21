@@ -19,11 +19,8 @@
 
 package net.minecraftforge.registries;
 
-import com.google.common.collect.HashBiMap;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
+import com.google.common.collect.*;
+import com.google.common.collect.Sets.SetView;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockAir;
 import net.minecraft.block.BlockObserver;
@@ -62,24 +59,19 @@ import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.EntityEntryBuilder;
 import net.minecraftforge.fml.common.registry.GameRegistry;
 import net.minecraftforge.fml.common.registry.VillagerRegistry.VillagerProfession;
-
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.BiMap;
+import net.minecraftforge.fml.common.toposort.ModSortingException;
+import net.minecraftforge.fml.common.toposort.TopologicalSort;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
+import net.minecraftforge.fml.common.toposort.TopologicalSort.IGraphSortCallback;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.Level;
 
@@ -121,6 +113,7 @@ public class GameData
         init();
     }
 
+    @SuppressWarnings("unchecked")
     public static void init()
     {
         if ( DISABLE_VANILLA_REGISTRIES)
@@ -131,16 +124,20 @@ public class GameData
         if (hasInit)
             return;
         hasInit = true;
-        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addCallback(BlockCallbacks.INSTANCE).create();
-        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addCallback(ItemCallbacks.INSTANCE).create();
-        makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).create();
-        makeRegistry(BIOMES,       Biome.class,       MAX_BIOME_ID).create();
-        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).create();
-        makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).create();
-        makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).create();
-        makeRegistry(RECIPES,      IRecipe.class,     MAX_RECIPE_ID).disableSaving().allowModification().addCallback(RecipeCallbacks.INSTANCE).create();
-        makeRegistry(PROFESSIONS,  VillagerProfession.class, MAX_PROFESSION_ID).create();
-        entityRegistry = (ForgeRegistry<EntityEntry>)makeRegistry(ENTITIES, EntityEntry.class, MAX_ENTITY_ID).addCallback(EntityCallbacks.INSTANCE).create();
+        final IForgeRegistry.PostRegisterCallback updateHolders = (reg, stage) -> ObjectHolderRegistry.INSTANCE.applyObjectHolders();
+        final ResourceLocation SORT_BLOCKS = new ResourceLocation("forge-sort:blocks");
+        // "*:*" would be preferable for ALL, but a bug in ResouceLocation means the two constructors behave differently on a domain with length 1.
+        final ResourceLocation ALL = new ResourceLocation("*");
+        makeRegistry(SOUNDEVENTS,  SoundEvent.class,  MAX_SOUND_ID).addDependant(SORT_BLOCKS).add(updateHolders).create();
+        makeRegistry(BLOCKS,       Block.class,       MAX_BLOCK_ID, new ResourceLocation("air")).addDependant(SORT_BLOCKS).addDependency(SOUNDEVENTS).addCallback(BlockCallbacks.INSTANCE).add(updateHolders).create();
+        makeRegistry(ITEMS,        Item.class,        MIN_ITEM_ID, MAX_ITEM_ID).addDependant(SORT_BLOCKS).addDependency(BLOCKS).addCallback(ItemCallbacks.INSTANCE).add(updateHolders).create();
+        makeRegistry(POTIONS,      Potion.class,      MAX_POTION_ID).addDependency(BLOCKS).create();
+        makeRegistry(ENCHANTMENTS, Enchantment.class, MAX_ENCHANTMENT_ID).addDependency(POTIONS).create();
+        makeRegistry(POTIONTYPES,  PotionType.class,  MAX_POTIONTYPE_ID, new ResourceLocation("empty")).addDependency(ITEMS).addDependency(POTIONS).create();
+        entityRegistry = (ForgeRegistry<EntityEntry>)makeRegistry(ENTITIES, EntityEntry.class, MAX_ENTITY_ID).addCallback(EntityCallbacks.INSTANCE).addDependency(POTIONTYPES).create();
+        makeRegistry(BIOMES,       Biome.class,       MAX_BIOME_ID).addDependency(ENTITIES).create();
+        makeRegistry(PROFESSIONS,  VillagerProfession.class, MAX_PROFESSION_ID).addDependency(ITEMS).create();
+        makeRegistry(RECIPES,      IRecipe.class,     MAX_RECIPE_ID).disableSaving().allowModification().addCallback(RecipeCallbacks.INSTANCE).addDependency(ALL).create();
     }
 
     private static <T extends IForgeRegistryEntry<T>> RegistryBuilder<T> makeRegistry(ResourceLocation name, Class<T> type, int min, int max)
@@ -716,6 +713,8 @@ public class GameData
     public static void fireCreateRegistryEvents()
     {
         MinecraftForge.EVENT_BUS.post(new RegistryEvent.NewRegistry());
+        // sort them here so that cyclic dependencies crash now
+        getSortedRegistries(RegistryManager.ACTIVE.registries);
     }
 
     public static void fireRegistryEvents()
@@ -724,8 +723,9 @@ public class GameData
     }
     public static void fireRegistryEvents(Predicate<ResourceLocation> filter)
     {
-        List<ResourceLocation> keys = Lists.newArrayList(RegistryManager.ACTIVE.registries.keySet());
-        Collections.sort(keys, (o1, o2) -> o1.toString().compareToIgnoreCase(o2.toString()));
+        List<RegistryHolder> keys = getSortedRegistries(RegistryManager.ACTIVE.registries);
+        keys.removeIf(filter.negate());
+
         /*
         RegistryManager.ACTIVE.registries.forEach((name, reg) -> {
             if (filter.test(name))
@@ -733,23 +733,12 @@ public class GameData
         });
         */
 
-        if (filter.test(BLOCKS))
+        for (RegistryHolder holder : keys)
         {
-            MinecraftForge.EVENT_BUS.post(RegistryManager.ACTIVE.getRegistry(BLOCKS).getRegisterEvent(BLOCKS));
-            ObjectHolderRegistry.INSTANCE.applyObjectHolders(); // inject any blocks
+            MinecraftForge.EVENT_BUS.post(holder.registry.getRegisterEvent(holder.key));
+            holder.registry.registrationComplete();
         }
-        if (filter.test(ITEMS))
-        {
-            MinecraftForge.EVENT_BUS.post(RegistryManager.ACTIVE.getRegistry(ITEMS).getRegisterEvent(ITEMS));
-            ObjectHolderRegistry.INSTANCE.applyObjectHolders(); // inject any items
-        }
-        for (ResourceLocation rl : keys)
-        {
-            if (!filter.test(rl)) continue;
-            if (rl == BLOCKS || rl == ITEMS) continue;
-            MinecraftForge.EVENT_BUS.post(RegistryManager.ACTIVE.getRegistry(rl).getRegisterEvent(rl));
-        }
-        ObjectHolderRegistry.INSTANCE.applyObjectHolders(); // inject everything else
+        ObjectHolderRegistry.INSTANCE.applyObjectHolders(); // inject everything
 
 
         /*
@@ -758,6 +747,135 @@ public class GameData
                 ((ForgeRegistry<?>)reg).freeze();
         });
         */
+    }
+
+    private static List<RegistryHolder> getSortedRegistries(BiMap<ResourceLocation, ForgeRegistry<?>> values)
+    {
+        final TopologicalSort.DirectedGraph<RegistryHolder> graph = new TopologicalSort.DirectedGraph<>();
+        final Map<String, RegistryHolder> lookup = Maps.newHashMap();
+        // bimap enables an arbitrary number of discrete sorting blocks
+        final BiMap<RegistryHolder, RegistryHolder> blocks = HashBiMap.create(), rBlocks = blocks.inverse();
+
+        // special targets, only 4
+        final RegistryHolder beforeAll = new RegistryHolder("before (all)");
+        final RegistryHolder before = new RegistryHolder("before");
+        final RegistryHolder after = new RegistryHolder("after");
+        final RegistryHolder afterAll = new RegistryHolder("after (all)");
+
+        // selectable targets
+        final RegistryHolder blockSort = new RegistryHolder(new ResourceLocation("forge-sort:blocks"), null);
+
+        // valid sort targets go in the lookup map
+        lookup.put(blockSort.toString(), blockSort);
+
+        values.forEach((loc, reg) ->
+        {
+            RegistryHolder key = new RegistryHolder(loc, reg);
+            graph.addNode(key);
+            lookup.put(loc.toString(), key);
+        });
+
+        // after registries: if a "forge-sort" registry is added, this won't erase it; stupid as it is
+        graph.addNode(beforeAll);
+        graph.addNode(blockSort);
+        graph.addNode(before);
+        graph.addNode(after);
+        graph.addNode(afterAll);
+
+        // define the sorting blocks
+        blocks.put(beforeAll, blockSort);
+        blocks.put(blockSort, before);
+        blocks.put(before, after);
+        blocks.put(after, afterAll);
+        // then pour it into the graph
+        blocks.forEach(graph::addEdge);
+
+        lookup.forEach((loc, key) ->
+        {
+            if (key.registry == null) return; // ignore sort targets
+
+            boolean preDep = false, postDep = false;
+            for (String sort : key.getDependants())
+            {
+                RegistryHolder dep = lookup.get(sort);
+                if (dep != null) // contains ...
+                {
+                    preDep = true;
+                    graph.addEdge(rBlocks.getOrDefault(dep, before), key);
+                    graph.addEdge(key, dep);
+                }
+                else if ("minecraft:*".equals(sort))
+                {
+                    preDep = postDep = true;
+                    graph.addEdge(beforeAll, key);
+                    graph.addEdge(key, blocks.get(beforeAll));
+                }
+            }
+            for (String sort : key.getDependencies())
+            {
+                RegistryHolder dep = lookup.get(sort);
+                if (dep != null) // contains ...
+                {
+                    postDep = true;
+                    graph.addEdge(dep, key);
+                    graph.addEdge(key, blocks.getOrDefault(dep, after));
+                }
+                else if ("minecraft:*".equals(sort))
+                {
+                    preDep = postDep = true;
+                    graph.addEdge(rBlocks.get(afterAll), key);
+                    graph.addEdge(key, afterAll);
+                }
+            }
+            if (!preDep) graph.addEdge(before, key);
+            if (!postDep) graph.addEdge(key, after);
+        });
+        List<RegistryHolder> keys = TopologicalSort.topologicalSort(graph, (node, sortedResult, visitedNodes, expandedNodes) ->
+        {
+            FMLLog.log.fatal("Registry Sorting failed.");
+            FMLLog.log.fatal("Visiting node {}", node);
+            FMLLog.log.fatal("Current sorted list : {}", sortedResult);
+            FMLLog.log.fatal("Visited set for this node : {}", visitedNodes);
+            FMLLog.log.fatal("Explored node set : {}", expandedNodes);
+            SetView<RegistryHolder> cycleList = Sets.difference(visitedNodes, expandedNodes);
+            FMLLog.log.fatal("Likely cycle is in : {}", cycleList);
+            throw new RegistrySortingException("There was a cycle detected in the input graph, sorting is not possible!", node, cycleList);
+        });
+        keys.removeIf(rh -> rh.registry == null);
+        return keys;
+    }
+
+    static class RegistryHolder extends ResourceLocation
+    {
+        // holding an actual ResourceLocation to avoid potential problems with caching a RegistryHolder in events
+        final ResourceLocation key;
+        final ForgeRegistry<?> registry;
+
+        // extending ResourceLocation isn't pretty, but this gives us the protected constructor to bypass potential future validation in the public constructors
+        // and to easily apply predicates without an unwrapping lambda
+        RegistryHolder(String sortingRule)
+        {
+            super(0, ":::" + sortingRule, "*");
+            key = this;
+            registry = null;
+        }
+
+        RegistryHolder(ResourceLocation name, ForgeRegistry<?> reg)
+        {
+            super(0, name.getResourceDomain(), name.getResourcePath());
+            key = name;
+            registry = reg;
+        }
+
+        String[] getDependants()
+        {
+            return registry == null ? new String[0] : registry.getDependants();
+        }
+
+        String[] getDependencies()
+        {
+            return registry == null ? new String[0] : registry.getDependencies();
+        }
     }
 
     public static ResourceLocation checkPrefix(String name)

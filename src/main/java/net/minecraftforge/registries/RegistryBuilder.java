@@ -38,11 +38,14 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
     private List<AddCallback<T>> addCallback = Lists.newArrayList();
     private List<ClearCallback<T>> clearCallback = Lists.newArrayList();
     private List<CreateCallback<T>> createCallback = Lists.newArrayList();
+    private List<PostRegisterCallback<T>> registerCallback = Lists.newArrayList();
     private boolean saveToDisc = true;
     private boolean allowOverrides = true;
     private boolean allowModifications = false;
     private DummyFactory<T> dummyFactory;
     private MissingFactory<T> missingFactory;
+    private List<String> sortBefore = Lists.newLinkedList();
+    private List<String> sortAfter = Lists.newLinkedList();
 
     public RegistryBuilder<T> setName(ResourceLocation name)
     {
@@ -83,6 +86,8 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
             this.add((ClearCallback<T>)inst);
         if (inst instanceof CreateCallback)
             this.add((CreateCallback<T>)inst);
+        if (inst instanceof PostRegisterCallback)
+            this.add((PostRegisterCallback<T>)inst);
         if (inst instanceof DummyFactory)
             this.set((DummyFactory<T>)inst);
         if (inst instanceof MissingFactory)
@@ -108,6 +113,12 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
         return this;
     }
 
+    public RegistryBuilder<T> add(PostRegisterCallback<T> register)
+    {
+        this.registerCallback.add(register);
+        return this;
+    }
+
     public RegistryBuilder<T> set(DummyFactory<T> factory)
     {
         this.dummyFactory = factory;
@@ -117,6 +128,31 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
     public RegistryBuilder<T> set(MissingFactory<T> missing)
     {
         this.missingFactory = missing;
+        return this;
+    }
+
+    /**
+     * Adding {@code "*"} as a dependant will sort your registry before all other registries,
+     * if you want to load before a registry that is sorted before {@code "*"} you will also need to.
+     * <p>
+     * Adding {@code "forge-sort:blocks"} as a dependant will sort you into the same phase as SoundEvents, Blocks, and Items.
+     * If you want to sort before one of those, you will also need to sort before this, if you are not sorting before {@code "*"}.
+     */
+    public RegistryBuilder<T> addDependant(ResourceLocation registry)
+    {
+        sortBefore.add(registry.toString());
+        return this;
+    }
+
+    /**
+     * Adding {@code "*"} as a dependency will sort your registry after all other registries,
+     * if you want to load after a registry that is sorted after {@code "*"} you will also need to.
+     * <p>
+     * Adding {@code "forge-sort:blocks"} as a dependency will not do anything useful, all registries that do not otherwise specify are sorted after it.
+     */
+    public RegistryBuilder<T> addDependency(ResourceLocation registry)
+    {
+        sortAfter.add(registry.toString());
         return this;
     }
 
@@ -141,7 +177,9 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
     public IForgeRegistry<T> create()
     {
         return RegistryManager.ACTIVE.createRegistry(registryName, registryType, optionalDefaultKey, minId, maxId,
-                getAdd(), getClear(), getCreate(), saveToDisc, allowOverrides, allowModifications, dummyFactory, missingFactory);
+                sortBefore.toArray(new String[0]), sortAfter.toArray(new String[0]),
+                getAdd(), getClear(), getCreate(), getAfterRegister(),
+                saveToDisc, allowOverrides, allowModifications, dummyFactory, missingFactory);
     }
 
     @Nullable
@@ -186,6 +224,21 @@ public class RegistryBuilder<T extends IForgeRegistryEntry<T>>
         {
             for (CreateCallback<T> cb : this.createCallback)
                 cb.onCreate(owner, stage);
+        };
+    }
+
+    @Nullable
+    private PostRegisterCallback<T> getAfterRegister()
+    {
+        if (registerCallback.isEmpty())
+            return null;
+        if (registerCallback.size() == 1)
+            return registerCallback.get(0);
+
+        return (owner, stage) ->
+        {
+            for (PostRegisterCallback<T> cb : this.registerCallback)
+                cb.afterRegistration(owner, stage);
         };
     }
 }
