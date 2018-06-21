@@ -19,6 +19,7 @@
 
 package net.minecraftforge.registries;
 
+import com.google.common.collect.Sets.SetView;
 import net.minecraftforge.fml.common.EnhancedRuntimeException;
 import net.minecraftforge.fml.common.toposort.ModSortingException;
 import net.minecraftforge.fml.common.toposort.ModSortingException.SortingExceptionData;
@@ -31,10 +32,20 @@ public class RegistrySortingException extends EnhancedRuntimeException
 
 	private SortingExceptionData<?> sortingExceptionData;
 
-	public <T> RegistrySortingException(ModSortingException e)
+	public RegistrySortingException(ModSortingException e)
 	{
-		super(e.getMessage());
-		sortingExceptionData =e.getExceptionData();
+		this(e.getMessage(),e.getExceptionData());
+	}
+
+	public <T> RegistrySortingException(String message, SortingExceptionData<T> sortingExceptionData)
+	{
+		super(message);
+		this.sortingExceptionData = sortingExceptionData;
+	}
+
+	public <T> RegistrySortingException(String message, T node, SetView<T> setView)
+	{
+		this(message,new SortingExceptionData<>(node,setView));
 	}
 
 	@SuppressWarnings("unchecked")

@@ -19,12 +19,8 @@
 
 package net.minecraftforge.registries;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.BiMap;
-import com.google.common.collect.HashBiMap;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
+import com.google.common.collect.*;
+import com.google.common.collect.Sets.SetView;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockAir;
 import net.minecraft.block.BlockObserver;
@@ -68,18 +64,14 @@ import net.minecraftforge.fml.common.toposort.TopologicalSort;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
+import net.minecraftforge.fml.common.toposort.TopologicalSort.IGraphSortCallback;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.Level;
 
@@ -838,16 +830,19 @@ public class GameData
             if (!preDep) graph.addEdge(before, key);
             if (!postDep) graph.addEdge(key, after);
         });
-        try
+        List<RegistryHolder> keys = TopologicalSort.topologicalSort(graph, (node, sortedResult, visitedNodes, expandedNodes) ->
         {
-            List<RegistryHolder> keys = TopologicalSort.topologicalSort(graph);
-            keys.removeIf(rh -> rh.registry == null);
-            return keys;
-        }
-        catch (ModSortingException e)
-        {
-            throw new RegistrySortingException(e);
-        }
+            FMLLog.log.fatal("Registry Sorting failed.");
+            FMLLog.log.fatal("Visiting node {}", node);
+            FMLLog.log.fatal("Current sorted list : {}", sortedResult);
+            FMLLog.log.fatal("Visited set for this node : {}", visitedNodes);
+            FMLLog.log.fatal("Explored node set : {}", expandedNodes);
+            SetView<RegistryHolder> cycleList = Sets.difference(visitedNodes, expandedNodes);
+            FMLLog.log.fatal("Likely cycle is in : {}", cycleList);
+            throw new RegistrySortingException("There was a cycle detected in the input graph, sorting is not possible!", node, cycleList);
+        });
+        keys.removeIf(rh -> rh.registry == null);
+        return keys;
     }
 
     static class RegistryHolder extends ResourceLocation
